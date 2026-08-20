@@ -49,8 +49,6 @@ Current distribution defaults:
 - npm binary installer package
 - GitHub artifact attestations
 
-Homebrew is intentionally not part of this template.
-
 ## npm publishing
 
 The generated `dist` npm publish job expects a GitHub Actions secret:
@@ -67,24 +65,10 @@ The template itself sets `publish = false`. A real project can opt in during boo
 
 ## Release process
 
-1. Update `Cargo.toml` to the release version and refresh `Cargo.lock` with a Cargo command.
-2. Update `docs/src/content/docs/changelog.md` with user-relevant changes.
-3. Run:
+The repository-local release skill is the canonical release procedure:
 
-```bash
-just check
-just docs-check
-just docs-build
-dist plan
+```text
+.agents/skills/release/SKILL.md
 ```
 
-4. Commit and push the release preparation.
-5. Push the matching tag:
-
-```bash
-just release-tag 0.2.0
-```
-
-6. Watch `.github/workflows/release.yml` to completion and verify the GitHub Release plus npm version.
-
-The release workflow is tag-driven. Do not repair a failed release by silently creating a different version; inspect the failed job first.
+Use it whenever cutting, shipping, or publishing a new release.

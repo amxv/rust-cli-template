@@ -63,12 +63,11 @@ dist generate
 - Prefer typed `clap` arguments and subcommands over manual argument parsing.
 - Preserve useful command-local `--help` output and examples as the surface grows.
 - `unsafe_code` is forbidden; `dbg!`, `todo!`, and `unimplemented!` are denied by project lints.
-- Do not introduce a file-size/LOC policy into projects from this template unless the project itself asks for one.
 - Keep `Cargo.lock` committed: these repos ship applications, not just libraries.
 
 ## Changing project identity
 
-For a newly cloned template, use the bootstrap script instead of broad manual search-and-replace:
+For a newly cloned template, use the bootstrap script to initialize project identity:
 
 ```bash
 just bootstrap --cli-name pluck --npm-package @acme/pluck --description "A fast file picker"
@@ -78,7 +77,7 @@ It synchronizes Cargo metadata, binary/crate references, `dist` npm identity, do
 
 ## Docs boundary
 
-All web tooling belongs in `docs/`. Do not move `package.json`, Bun dependencies, Astro config, `.astro`, or Vercel config back to the repository root.
+Keep all web tooling in `docs/`: package metadata, Bun dependencies, Astro config, generated Astro state, and Vercel config.
 
 Vercel should use `docs` as its Root Directory. `docs/scripts/should-build.mjs` intentionally skips deployments for Rust-only changes.
 
@@ -86,4 +85,4 @@ Vercel should use `docs` as its Root Directory. `docs/scripts/should-build.mjs` 
 
 `dist-workspace.toml` is the source of truth for binary/install targets and npm installer configuration. `.github/workflows/release.yml` is generated output. If distribution changes, edit `dist-workspace.toml`, run `dist generate`, and commit both changes together.
 
-Before tagging, read `.agents/skills/release/SKILL.md`.
+For any request to cut or ship a release, read and follow `.agents/skills/release/SKILL.md`.

@@ -27,7 +27,7 @@ just bootstrap \
   --rust-version 1.98.0
 ```
 
-The bootstrap script detects the new GitHub origin and synchronizes Cargo, `dist`, docs, npm, license, and toolchain metadata. It never creates another repository or deletes Git history.
+The bootstrap script detects the new GitHub origin and synchronizes Cargo, `dist`, docs, npm, license, and toolchain metadata.
 
 ## Run the starter
 
