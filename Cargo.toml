@@ -36,6 +36,24 @@ dbg_macro = "deny"
 todo = "deny"
 unimplemented = "deny"
 
+# Fast local development defaults; use `--profile debugging` when full debug
+# information is actually needed.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.test]
+debug = "line-tables-only"
+
+[profile.test.package."*"]
+debug = false
+
+[profile.debugging]
+inherits = "dev"
+debug = true
+
 [profile.release]
 strip = true
 lto = "thin"
