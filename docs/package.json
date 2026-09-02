@@ -14,8 +14,8 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
     "@types/node": "^24.0.13",
-    "astro": "^7.0.3",
-    "typescript": "^5.9.2",
+    "astro": "^7.2.10",
+    "typescript": "^6.0.3",
     "zuedocs": "0.1.26"
   }
 }
