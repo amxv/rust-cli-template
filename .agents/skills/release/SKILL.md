@@ -168,7 +168,7 @@ gh release view "v${VERSION}" --json tagName,name,url,assets
 npm view "<npm-package>" version dist-tags.latest --json
 ```
 
-For direct distribution, instead verify that the website-hosted `/install.sh` and `/install.ps1` match the GitHub Release installer artifact names, and test the installer plus `upgrade --check`. Confirm the GitHub Release contains only the artifacts described by `dist plan`.
+For direct distribution, instead verify that the website-hosted `/install.sh` and `/install.ps1` match the GitHub Release installer artifact names, and test the installer plus `upgrade --check` and `auto-update on|off|status` using an isolated/mock scheduler. Confirm the GitHub Release contains only the artifacts described by `dist plan`.
 
 If crates.io publication was requested, publish/verify it separately and report its status separately from GitHub/npm.
 

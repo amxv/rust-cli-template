@@ -75,8 +75,12 @@ just bootstrap --cli-name pluck --distribution npm --npm-package @acme/pluck --d
 
 For a direct install/upgrade project, use `--distribution direct` and omit
 `--npm-package`. Direct mode creates website-hosted `install.sh`/`install.ps1`,
-a native `upgrade --check` command, and a release workflow without npm. npm
+a native `upgrade --check` command, opt-in `auto-update on|off|status` for
+daily background checks, and a release workflow without npm. npm
 mode produces only the npm installer/publish path. The template defaults to npm.
+Daily checks run via launchd (macOS), systemd user timers (Linux), or Task
+Scheduler (Windows), independently of the CLI process. Auto-update is off by
+default; failures do not silently turn it off or create retry loops.
 
 Bootstrap synchronizes Cargo metadata, binary/crate references, selected
 `dist` publishing method, docs identity fields, canonical URL, license, and

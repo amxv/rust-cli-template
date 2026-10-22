@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -101,14 +102,77 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("github.com/example/spark", installer)
         self.assertIn("${Cli}-installer.ps1", (self.repo / "docs/public/install.ps1").read_text())
         self.assertIn("https://spark.example.com", (self.repo / "src/commands/upgrade.rs").read_text())
+        self.assertTrue((self.repo / "src/commands/auto_update.rs").exists())
+        self.assertIn("AutoUpdate", (self.repo / "src/cli.rs").read_text())
         run(self.repo, "sh", "-n", "docs/public/install.sh")
+        run(self.repo, "cargo", "fmt", "--all", "--", "--check")
         run(self.repo, "cargo", "test", "--locked")
         output = run(self.repo, "cargo", "run", "--quiet", "--", "upgrade", "--help")
         self.assertIn("--check", output)
+        self.check_auto_update_controls()
         self.cleanup()
         self.assertTrue((self.repo / "docs/public/install.sh").exists())
         self.assertTrue((self.repo / "src/commands/upgrade.rs").exists())
+        self.assertTrue((self.repo / "src/commands/auto_update.rs").exists())
         run(self.repo, "cargo", "check", "--locked")
+
+    def check_auto_update_controls(self) -> None:
+        run(self.repo, "cargo", "build", "--locked")
+        cargo = json.loads(run(self.repo, "cargo", "metadata", "--no-deps", "--format-version", "1"))
+        cli = Path(cargo["target_directory"]) / "debug" / ("spark.exe" if os.name == "nt" else "spark")
+        self.assertTrue(cli.is_file(), f"missing compiled fixture executable: {cli}")
+        home = self.repo / "scheduler-home"
+        commands = self.repo / "scheduler-bin"
+        home.mkdir()
+        commands.mkdir()
+        fake = commands / ("launchctl" if sys.platform == "darwin" else "systemctl")
+        fake.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SCHEDULER_TEST_LOG\"\n"
+                        "if [ \"$1\" = print ]; then\n"
+                        "  case \"$2\" in */com.example.spark.auto-update) exit 1 ;; esac\n"
+                        "fi\nexit 0\n")
+        fake.chmod(0o755)
+        log = self.repo / "scheduler.log"
+        env = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
+               "PATH": f"{commands}:{os.environ.get('PATH', '')}", "SCHEDULER_TEST_LOG": str(log)}
+        fake_curl = commands / "curl"
+        fake_curl.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$CURL_TEST_LOG\"\n"
+                             "if [ \"${FAKE_CURL_FAIL:-0}\" = 1 ]; then exit 7; fi\n"
+                             "printf 'HTTP/2 302\\r\\nlocation: https://github.com/example/spark/releases/tag/v0.1.0\\r\\n\\r\\n'\n")
+        fake_curl.chmod(0o755)
+        curl_log = self.repo / "curl.log"
+        env["CURL_TEST_LOG"] = str(curl_log)
+
+        def invoke(*args: str) -> str:
+            result = subprocess.run([str(cli), *args], text=True, capture_output=True, env=env, cwd=self.repo)
+            self.assertEqual(result.returncode, 0, f"{' '.join(args)}: {result.stderr}")
+            return result.stdout
+
+        self.assertIn("off", invoke("auto-update", "status"))
+        invoke("upgrade", "--automatic")  # disabled, no real network access
+        invoke("auto-update", "on")
+        self.assertIn("on (every 24 hours)", invoke("auto-update", "status"))
+        env["FAKE_CURL_FAIL"] = "1"
+        failed = subprocess.run([str(cli), "upgrade", "--automatic"], text=True, capture_output=True, cwd=self.repo, env=env)
+        self.assertNotEqual(failed.returncode, 0, "network failure must be surfaced")
+        self.assertIn("on", invoke("auto-update", "status"), "a failed check must not disable scheduling")
+        first_calls = len(curl_log.read_text().splitlines())
+        self.assertEqual(first_calls, 1)
+        invoke("upgrade", "--automatic")  # already claimed today; no retry loop
+        self.assertEqual(len(curl_log.read_text().splitlines()), 1)
+        env.pop("FAKE_CURL_FAIL")
+        checked = invoke("upgrade", "--check")
+        self.assertIn("Installed: 0.1.0", checked)
+        self.assertIn("Latest: 0.1.0", checked)
+        self.assertNotIn("Update available.", checked)
+        if sys.platform == "darwin":
+            self.assertIn("bootstrap gui/", log.read_text())
+            self.assertIn("86400", (home / "Library/LaunchAgents/com.example.spark.auto-update.plist").read_text())
+        else:
+            self.assertIn("enable --now", log.read_text())
+            self.assertIn("OnCalendar=daily", (home / ".config/systemd/user/example.spark.auto-update.timer").read_text())
+        invoke("auto-update", "off")
+        self.assertIn("off", invoke("auto-update", "status"))
+        invoke("upgrade", "--automatic")  # opt-out is persistent
 
 
 if __name__ == "__main__":

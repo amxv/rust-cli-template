@@ -418,6 +418,7 @@ def configure_distribution(new: State) -> None:
     generate("install.sh", "docs/public/install.sh")
     generate("install.ps1", "docs/public/install.ps1")
     generate("upgrade.rs", "src/commands/upgrade.rs")
+    generate("auto_update.rs", "src/commands/auto_update.rs")
 
     cli_file = ROOT / "src/cli.rs"
     cli = cli_file.read_text()
@@ -425,8 +426,25 @@ def configure_distribution(new: State) -> None:
         cli = cli.replace(
             "pub enum Command {",
             "pub enum Command {\n    /// Install the latest release or check for updates.\n"
-            "    Upgrade {\n        #[arg(long)]\n        check: bool,\n    },",
+            "    Upgrade {\n        #[arg(long)]\n        check: bool,\n"
+            "        /// Reserved for the daily system scheduler.\n"
+            "        #[arg(long, hide = true, conflicts_with = \"check\")]\n"
+            "        automatic: bool,\n    },",
             1,
+        )
+    if "AutoUpdate {" not in cli:
+        cli = cli.replace(
+            "pub enum Command {",
+            "pub enum Command {\n    /// Enable, disable, or inspect daily automatic upgrades.\n"
+            "    AutoUpdate {\n        #[command(subcommand)]\n        action: AutoUpdateAction,\n    },",
+            1,
+        )
+    if "pub enum AutoUpdateAction" not in cli:
+        cli += (
+            "\n#[derive(Debug, Subcommand)]\n"
+            "pub enum AutoUpdateAction {\n    /// Enable daily update checks and installation.\n"
+            "    On,\n    /// Disable daily automatic updates.\n    Off,\n"
+            "    /// Show the saved setting and last check time.\n    Status,\n}\n"
         )
     cli_file.write_text(cli)
 
@@ -435,7 +453,13 @@ def configure_distribution(new: State) -> None:
     if "Command::Upgrade" not in lib:
         lib = lib.replace(
             "match cli.command {",
-            "match cli.command {\n        Command::Upgrade { check } => commands::upgrade::run(check),",
+            "match cli.command {\n        Command::Upgrade { check, automatic } => commands::upgrade::run(check, automatic),",
+            1,
+        )
+    if "Command::AutoUpdate" not in lib:
+        lib = lib.replace(
+            "match cli.command {",
+            "match cli.command {\n        Command::AutoUpdate { action } => commands::auto_update::run(action),",
             1,
         )
     lib_file.write_text(lib)
@@ -444,6 +468,8 @@ def configure_distribution(new: State) -> None:
     commands = commands_file.read_text()
     if "pub mod upgrade;" not in commands:
         commands += "pub mod upgrade;\n"
+    if "pub mod auto_update;" not in commands:
+        commands += "pub mod auto_update;\n"
     commands_file.write_text(commands)
 
     dist = shutil.which("dist")
@@ -454,6 +480,7 @@ def configure_distribution(new: State) -> None:
     if expected not in version:
         raise SystemExit(f"Expected dist {expected}, found: {version.strip()}")
     subprocess.run([dist, "generate"], cwd=ROOT, check=True)
+    subprocess.run(["cargo", "fmt", "--all"], cwd=ROOT, check=True)
 
 
 def render_license(state: State) -> str:
