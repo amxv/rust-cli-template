@@ -72,6 +72,7 @@ class State:
     rust_version: str
     crates_io: bool
     distribution: str
+    macos_menubar: bool
 
     @property
     def github_url(self) -> str:
@@ -99,6 +100,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--npm-package", help="npm package, e.g. @acme/pluck or pluck")
     parser.add_argument("--distribution", choices=("npm", "direct"), default=None,
                         help="npm (default) or direct GitHub Releases with website installers and upgrade")
+    parser.add_argument("--macos-menubar", action="store_true",
+                        help="Include an ad-hoc-signed Swift menu bar .app in direct macOS releases")
     parser.add_argument("--description", help="One-line project description")
     parser.add_argument("--homepage", help="Project homepage URL")
     parser.add_argument("--canonical-url", help="Canonical docs-site URL")
@@ -172,6 +175,7 @@ def current_state() -> State:
         rust_version=toolchain,
         crates_io=package.get("publish", True) is not False,
         distribution=distribution,
+        macos_menubar=(ROOT / "apps/menubar/Info.plist").is_file(),
     )
 
 
@@ -202,6 +206,9 @@ def parse_npm(value: str) -> tuple[str | None, str]:
 
 def resolve_state(current: State, args: argparse.Namespace) -> State:
     distribution = args.distribution or current.distribution
+    macos_menubar = args.macos_menubar or current.macos_menubar
+    if macos_menubar and distribution != "direct":
+        raise SystemExit("--macos-menubar requires --distribution direct")
     if current.github_repo != TEMPLATE_REPO and distribution != current.distribution:
         raise SystemExit("Choose distribution on first bootstrap; use a fresh template to switch methods")
     if distribution == "direct" and args.npm_package:
@@ -253,6 +260,7 @@ def resolve_state(current: State, args: argparse.Namespace) -> State:
         rust_version=args.rust_version or current.rust_version,
         crates_io=current.crates_io if args.crates_io is None else args.crates_io,
         distribution=distribution,
+        macos_menubar=macos_menubar,
     )
     validate_state(state)
     if args.visibility == "private":
@@ -401,11 +409,27 @@ def configure_distribution(new: State) -> None:
     templates = ROOT / "scripts/direct-templates"
     substitutions = {
         "__CLI__": new.cli_name,
+        "__BINARY__": new.cli_name,
         "__CLI_ENV__": re.sub(r"[^A-Za-z0-9]", "_", new.cli_name).upper(),
         "__OWNER__": new.github_owner,
         "__REPO__": new.github_repo,
         "__SITE__": new.canonical_url.rstrip("/"),
     }
+    if new.macos_menubar:
+        app_name = "".join(word[:1].upper() + word[1:] for word in re.split(r"[._-]+", new.cli_name) if word)
+        bundle_id = (
+            "com."
+            + re.sub(r"[^a-z0-9-]", "-", new.github_owner.lower())
+            + "."
+            + re.sub(r"[^a-z0-9-]", "-", new.github_repo.lower())
+            + ".menubar"
+        )
+        substitutions.update({
+            "__APP_NAME__": app_name,
+            "__APP_ID__": bundle_id,
+            "__APP_EXEC__": new.cli_name + "-menubar",
+            "__MENU_LETTER__": new.cli_name[0].upper(),
+        })
 
     def generate(source: str, destination: str) -> None:
         text = (templates / source).read_text()
@@ -414,11 +438,28 @@ def configure_distribution(new: State) -> None:
         target = ROOT / destination
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text)
+        if destination == "apps/menubar/build.sh":
+            target.chmod(0o755)
 
-    generate("install.sh", "docs/public/install.sh")
+    generate("install-menubar.sh" if new.macos_menubar else "install.sh", "docs/public/install.sh")
     generate("install.ps1", "docs/public/install.ps1")
     generate("upgrade.rs", "src/commands/upgrade.rs")
     generate("auto_update.rs", "src/commands/auto_update.rs")
+    if new.macos_menubar:
+        generate("menubar/Info.plist", "apps/menubar/Info.plist")
+        generate("menubar/build.sh", "apps/menubar/build.sh")
+        generate("menubar/main.swift", "apps/menubar/Sources/main.swift")
+        generate("menubar/publish-menubar.yml", ".github/workflows/publish-menubar.yml")
+        dist_text = DIST_TOML.read_text()
+        if "post-announce-jobs" not in dist_text:
+            dist_text = dist_text.replace(
+                'publish-jobs = []\n',
+                'publish-jobs = []\n'
+                'post-announce-jobs = ["./publish-menubar"]\n'
+                'github-custom-job-permissions = { "publish-menubar" = { contents = "write" } }\n',
+                1,
+            )
+        DIST_TOML.write_text(dist_text)
 
     cli_file = ROOT / "src/cli.rs"
     cli = cli_file.read_text()
@@ -577,6 +618,7 @@ def main() -> None:
     print(f"Initialized {new.cli_name} for {new.github_url}")
     print(f"Cargo package: {new.crate_name}")
     print(f"Distribution: {new.distribution}")
+    print(f"macOS menu bar app: {'included' if new.macos_menubar else 'not included'}")
     if new.distribution == "npm":
         print(f"npm package: {new.npm_full_name}")
     print("README and docs pages are intentionally left for the project agent.")

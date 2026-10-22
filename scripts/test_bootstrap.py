@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -49,13 +50,16 @@ class BootstrapTests(unittest.TestCase):
         self.repo = copy_repo(Path(self.temp.name) / "checkout")
         self.prose = {p: (self.repo / p).read_bytes() for p in PROSE_FILES}
 
-    def bootstrap(self, distribution: str) -> None:
-        run(
-            self.repo, "python3", "scripts/bootstrap.py", "--cli-name", "spark", "--crate-name", "spark",
+    def bootstrap(self, distribution: str, menubar: bool = False) -> None:
+        args = [
+            "python3", "scripts/bootstrap.py", "--cli-name", "spark", "--crate-name", "spark",
             "--github-owner", "example", "--github-repo", "spark", "--description", 'A "fast" native CLI',
             "--homepage", "https://spark.example.com", "--canonical-url", "https://spark.example.com",
             "--rust-version", "1.98.0", "--distribution", distribution,
-        )
+        ]
+        if menubar:
+            args.append("--macos-menubar")
+        run(self.repo, *args)
         for relative, original in self.prose.items():
             self.assertEqual((self.repo / relative).read_bytes(), original, f"bootstrap modified {relative}")
         self.assertEqual(toml(self.repo, "Cargo.toml")["package"]["name"], "spark")
@@ -77,6 +81,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_npm_only(self) -> None:
         self.bootstrap("npm")
+        self.assertFalse((self.repo / "apps/menubar").exists())
         dist = toml(self.repo, "dist-workspace.toml")["dist"]
         self.assertEqual(dist["installers"], ["npm"])
         self.assertEqual(dist["publish-jobs"], ["npm"])
@@ -86,10 +91,13 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("publish-npm:", (self.repo / ".github/workflows/release.yml").read_text())
         run(self.repo, "cargo", "test", "--locked")
         self.cleanup()
+        self.assertFalse((self.repo / "scripts/direct-templates/menubar").exists())
         run(self.repo, "cargo", "check", "--locked")
 
     def test_direct_only(self) -> None:
         self.bootstrap("direct")
+        self.assertFalse((self.repo / "apps/menubar").exists())
+        self.assertFalse((self.repo / ".github/workflows/publish-menubar.yml").exists())
         dist = toml(self.repo, "dist-workspace.toml")["dist"]
         self.assertEqual(dist["installers"], ["shell", "powershell"])
         self.assertEqual(dist["publish-jobs"], [])
@@ -111,9 +119,113 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("--check", output)
         self.check_auto_update_controls()
         self.cleanup()
+        self.assertFalse((self.repo / "scripts/direct-templates/menubar").exists())
         self.assertTrue((self.repo / "docs/public/install.sh").exists())
         self.assertTrue((self.repo / "src/commands/upgrade.rs").exists())
         self.assertTrue((self.repo / "src/commands/auto_update.rs").exists())
+        run(self.repo, "cargo", "check", "--locked")
+
+    def test_menu_bar_requires_direct_distribution(self) -> None:
+        p = subprocess.run(
+            ["python3", "scripts/bootstrap.py", "--macos-menubar", "--distribution", "npm"],
+            cwd=self.repo, text=True, capture_output=True
+        )
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--macos-menubar requires --distribution direct", p.stderr)
+        self.assertFalse((self.repo / "apps/menubar").exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "Swift menu bar bundles require macOS")
+    def test_direct_menu_bar_builds_installs_and_survives_cleanup(self) -> None:
+        self.bootstrap("direct", menubar=True)
+        self.assertTrue((self.repo / "apps/menubar/Info.plist").exists())
+        self.assertTrue((self.repo / "apps/menubar/Sources/main.swift").exists())
+        self.assertTrue((self.repo / ".github/workflows/publish-menubar.yml").exists())
+        self.assertFalse((self.repo / "package.json").exists())
+        dist = toml(self.repo, "dist-workspace.toml")["dist"]
+        self.assertEqual(dist["post-announce-jobs"], ["./publish-menubar"])
+        self.assertEqual(dist["installers"], ["shell", "powershell"])
+        workflow = (self.repo / ".github/workflows/release.yml").read_text()
+        self.assertIn("custom-publish-menubar:", workflow)
+        self.assertNotIn("publish-npm:", workflow)
+        script = (self.repo / "docs/public/install.sh").read_text()
+        self.assertIn("Spark.app", script)
+        self.assertIn("${binary}_darwin_${arch}.tar.gz", script)
+        run(self.repo, "dist", "generate", "--check")
+        run(self.repo, "sh", "-n", "docs/public/install.sh")
+        run(self.repo, "cargo", "fmt", "--all", "--", "--check")
+        run(self.repo, "cargo", "test", "--locked")
+        run(self.repo, "cargo", "build", "--locked")
+        cargo = json.loads(run(self.repo, "cargo", "metadata", "--no-deps", "--format-version", "1"))
+        binary = Path(cargo["target_directory"]) / "debug" / "spark"
+        stage = self.repo / "stage"
+        stage.mkdir()
+        shutil.copy2(binary, stage / "spark")
+        app = stage / "Spark.app"
+        architecture = "arm64" if os.uname().machine in ("arm64", "aarch64") else "amd64"
+        run(self.repo, "bash", "apps/menubar/build.sh", str(app), architecture, "0.1.0")
+        run(self.repo, "codesign", "--verify", "--deep", "--strict", str(app))
+        self.assertIn(
+            "companion CLI are ready",
+            run(self.repo, str(app / "Contents/MacOS/spark-menubar"), "--check")
+        )
+        asset = f"spark_darwin_{architecture}.tar.gz"
+        archive = self.repo / asset
+        p = subprocess.run(
+            ["tar", "-czf", str(archive), "-C", str(stage), "spark", "Spark.app"],
+            cwd=self.repo, capture_output=True, text=True,
+            env={**os.environ, "COPYFILE_DISABLE": "1"}
+        )
+        self.assertEqual(p.returncode, 0, p.stderr)
+        checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+        (self.repo / (asset + ".sha256")).write_text(checksum + "\n")
+        fake_tools = self.repo / "mock-tools"
+        fake_tools.mkdir()
+        curl = fake_tools / "curl"
+        curl.write_text("\n".join([
+            "#!/bin/sh",
+            'target=""',
+            'previous=""',
+            'asset=""',
+            'for argument in "$@"; do',
+            '  if [ "$previous" = "-o" ]; then target="$argument"; fi',
+            '  previous="$argument"',
+            '  case "$argument" in',
+            f'    */{asset}.sha256) asset="{asset}.sha256" ;;',
+            f'    */{asset}) asset="{asset}" ;;',
+            "  esac",
+            "done",
+            'test -n "$asset" && test -n "$target" || exit 40',
+            'cp "$FAKE_RELEASE/$asset" "$target"',
+            "",
+        ]))
+        curl.chmod(0o755)
+        installed = self.repo / "installed"
+        env = {
+            **os.environ, "PATH": str(fake_tools) + ":" + os.environ.get("PATH", ""),
+            "CLI_INSTALL_DIR": str(installed), "CLI_VERSION": "0.1.0",
+            "CLI_NO_LAUNCH": "1", "FAKE_RELEASE": str(self.repo),
+        }
+
+        def install(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(["sh", "docs/public/install.sh", *args], cwd=self.repo,
+                                  text=True, capture_output=True, env=env)
+
+        result = install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((installed / "spark").read_bytes(), binary.read_bytes())
+        run(self.repo, "codesign", "--verify", "--deep", "--strict", str(installed / "Spark.app"))
+        (self.repo / (asset + ".sha256")).write_text("0" * 64 + "\n")
+        result = install("upgrade")
+        self.assertNotEqual(result.returncode, 0, "checksum mismatch must abort before replacing the app")
+        self.assertEqual((installed / "spark").read_bytes(), binary.read_bytes())
+        (self.repo / (asset + ".sha256")).write_text(checksum + "\n")
+        result = install("upgrade")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        run(self.repo, "codesign", "--verify", "--deep", "--strict", str(installed / "Spark.app"))
+        self.cleanup()
+        self.assertTrue((self.repo / "apps/menubar/build.sh").exists())
+        self.assertTrue((self.repo / ".github/workflows/publish-menubar.yml").exists())
+        self.assertFalse((self.repo / "scripts/direct-templates/menubar").exists())
         run(self.repo, "cargo", "check", "--locked")
 
     def check_auto_update_controls(self) -> None:

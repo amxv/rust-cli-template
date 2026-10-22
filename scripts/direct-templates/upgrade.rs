@@ -115,6 +115,7 @@ fn install(version: &str, automatic: bool) -> Result<()> {
         command = Command::new("sh");
         command.arg(&path).arg("upgrade");
         command.env("CLI_UPGRADE_TARGET", &exe);
+        command.env("CLI_VERSION", version);
     }
     command.stdin(Stdio::null()).stdout(Stdio::inherit()).stderr(Stdio::inherit());
     if cfg!(windows) {

@@ -88,6 +88,22 @@ Rust toolchain. GitHub owner/repo are inferred from the cloned origin when
 possible. README and docs pages are deliberately left for project agents to
 write. Once setup is final, run `just bootstrap-clean` and rerun `just check`.
 
+## Optional macOS menu bar scaffold
+
+The Swift/AppKit app is opt-in via **--macos-menubar**, only with direct releases.
+It lives in apps/menubar with its build script, while the Rust CLI owns
+upgrade and auto-update behavior. cargo-dist includes the
+.github/workflows/publish-menubar.yml custom post-announce job only for this
+mode. That job attaches arm64 and Intel signed app + Rust CLI tarballs and
+SHA-256 checksum sidecars to the release. The website installer installs the
+pair and reopens a previously running app on upgrade.
+
+When the flag is omitted, generate no macOS app, app CI job, or bundled
+installer. Bootstrap-clean removes unused Swift templates; real app sources
+are retained only in opted-in projects. Ad-hoc signing plus scripted curl/tar
+installation does not provide Developer ID notarization. Do not disable
+Gatekeeper or claim that browser downloads are warning-free.
+
 ## Docs boundary
 
 Keep all web tooling in `docs/`: package metadata, Bun dependencies, Astro config, generated Astro state, and Vercel config.

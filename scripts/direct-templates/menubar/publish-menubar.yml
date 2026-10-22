@@ -1,0 +1,69 @@
+name: Publish Swift menu bar bundles
+
+# cargo-dist includes this only when direct --macos-menubar is selected.
+# post-announce means the GitHub Release already exists before we upload.
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish-menu-bar:
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            triple: aarch64-apple-darwin
+            runner: macos-14
+          - arch: amd64
+            triple: x86_64-apple-darwin
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain and native target
+        shell: bash
+        env:
+          TARGET: ${{ matrix.triple }}
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup target add "$TARGET" --toolchain 1.98.0
+      - name: Build, ad-hoc sign, and archive CLI + Swift app
+        shell: bash
+        env:
+          TARGET: ${{ matrix.triple }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          cargo +1.98.0 build --locked --release --target "$TARGET"
+          mkdir -p stage out
+          cp "target/$TARGET/release/__CLI__" "stage/__CLI__"
+          chmod 755 "stage/__CLI__"
+          codesign --force --sign - "stage/__CLI__"
+          codesign --verify --strict "stage/__CLI__"
+          swift_arch="$ARCH"
+          if [ "$ARCH" = amd64 ]; then swift_arch=x86_64; fi
+          bash apps/menubar/build.sh "$PWD/stage/__APP_NAME__.app" "$swift_arch" "$version"
+          codesign --verify --deep --strict "stage/__APP_NAME__.app"
+          "stage/__APP_NAME__.app/Contents/MacOS/__APP_EXEC__" --check
+          cp LICENSE stage/LICENSE
+          archive="__CLI___darwin_${ARCH}.tar.gz"
+          COPYFILE_DISABLE=1 tar -czf "out/$archive" -C stage "__CLI__" "__APP_NAME__.app" LICENSE
+          shasum -a 256 "out/$archive" | awk '{print $1}' > "out/$archive.sha256"
+      - name: Attach verified menu bar bundles to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "$GITHUB_REF_NAME" out/* --clobber

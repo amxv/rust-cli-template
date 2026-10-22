@@ -113,6 +113,18 @@ cargo publish --dry-run
 
 Treat crates.io publication as a separate publication channel with its own authentication/trusted-publisher state.
 
+## Optional Swift macOS menu bar release
+
+For direct projects containing apps/menubar, dist-workspace.toml must retain
+the custom post-announce job pointing to .github/workflows/publish-menubar.yml.
+The latter publishes two ad-hoc-signed Swift .app + Rust CLI archives and
+matching checksum sidecars after cargo-dist creates the release. The website's
+macOS install.sh should download this paired archive, install it with no
+quarantine metadata, verify its signature and relaunch the app if previously
+running. Check both architecture assets and use dist generate --check; do not
+hand-edit the generated main release.yml. Without the flag, none of these app
+artifacts/jobs should exist.
+
 ## 6. Commit and push release preparation
 
 Review the diff. Release preparation normally includes:

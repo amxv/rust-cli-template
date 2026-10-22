@@ -103,6 +103,28 @@ Automatic updates are **off by default** and enabled only at the user's request.
 
 The canonical website must be deployed before CLI upgrades can fetch its installer. Linux needs a functioning systemd user manager, and CLIs that manage running services may require additional application-specific safety checks before performing upgrades.
 
+### Optional Swift macOS menu bar app
+
+Include **--macos-menubar** when selecting **--distribution direct**:
+
+~~~bash
+just bootstrap \
+  --cli-name pluck --distribution direct --macos-menubar \
+  --description "A fast file picker" \
+  --canonical-url https://pluck.example.com \
+  --rust-version 1.98.0
+~~~
+
+This generates **apps/menubar/** containing a Swift/AppKit starter, Info.plist, and an ad-hoc signing build script. Its minimal menu includes **Check for Updates**, **Automatic Updates (Daily)**, **Launch Menu Bar at Login**, **Open Documentation**, and **Quit**. Menu actions call the Rust CLI, so both share update preferences and scheduler behavior.
+
+The direct release config also enables a **cargo-dist post-announce job** defined in .github/workflows/publish-menubar.yml. It builds and signs Apple Silicon and Intel Swift apps, bundles each with a matching Rust CLI in a checksummed macOS tarball, and attaches those artifacts to the existing GitHub Release. The generated main release workflow remains managed by **dist generate**.
+
+The website installer checks the archive SHA-256 checksum and app signature, then installs both CLI and app together in a user-writable location. Subsequent manual and scheduled CLI upgrades replace both and **reopen the menu bar app if it was running**.
+
+Ad-hoc signing follows the Zodex pattern: a normal curl/tar install does not carry Finder quarantine metadata, avoiding the usual downloaded-app prompt. However, **ad-hoc signing is not Developer ID notarization**. A manually downloaded app may still trigger Gatekeeper. No macOS security settings are disabled.
+
+Without the optional flag, generated projects contain **no Swift source, app release job, or bundled installer**. Running **just bootstrap-clean** removes unused app template files along with the other Bootstrap machinery; opted-in app runtime sources and workflow files are retained.
+
 ## npm distribution and crates.io
 
 npm bootstrap configures `cargo-dist` to generate the native archives and npm installer package, with a GitHub Actions npm publishing job. Before the first tag, set **`NPM_TOKEN`** in the repository's GitHub Actions secrets. The direct path has no npm package and needs no npm token.
