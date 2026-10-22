@@ -113,8 +113,13 @@ Other pushes create no Vercel deployment and use no deployment quota. Keep the
 Vercel GitHub connection and Root Directory `docs`, but preserve
 `git.deploymentEnabled: false` and the absence of `ignoreCommand` in
 `docs/vercel.json` to avoid duplicate, quota-consuming Git deployments. Before
-the first generated-project deployment, securely configure GitHub secrets
-`VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` from the linked project.
+the first generated-project deployment, run `just vercel-provision` **after**
+linking `docs/` and **before** `just bootstrap-clean`. It reuses local Vercel
+CLI authentication (or a Keychain fallback) to mint a project-scoped token,
+stores `VERCEL_TOKEN` as a GitHub Actions **secret**, and writes Vercel IDs as
+Actions **variables**. Never print or commit credentials. GitHub Actions builds
+the static Astro output and deploys it with `--prebuilt`, compatible with
+restricted project tokens; local agents only run `just docs-check`.
 Run `just docs-test` to verify the GitHub filter and the retained local diff
 helper (`docs/scripts/should-build.mjs`). Never re-enable automatic Vercel Git
 deployments without first disabling the Actions deployment path.

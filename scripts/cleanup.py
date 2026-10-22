@@ -19,13 +19,20 @@ def main() -> None:
 
     justfile = ROOT / "Justfile"
     source = justfile.read_text()
-    pattern = r"(?m)^bootstrap \*args:\n    python3 scripts/bootstrap\.py \{\{args\}\}\n\nbootstrap-clean:\n    python3 scripts/cleanup\.py\n\n"
+    pattern = (
+        r"(?m)^bootstrap \*args:\n    python3 scripts/bootstrap\.py \{\{args\}\}\n\n"
+        r"bootstrap-clean:\n    python3 scripts/cleanup\.py\n\n"
+        r"vercel-provision:\n    node scripts/provision-vercel\.mjs\n\n"
+    )
     updated, count = re.subn(pattern, "", source, count=1)
     if count != 1:
         raise SystemExit("Could not find the bootstrap and bootstrap-clean recipes in Justfile")
     justfile.write_text(updated)
 
-    for relative in ["scripts/bootstrap.py", "scripts/cleanup.py", "scripts/test_bootstrap.py"]:
+    for relative in [
+        "scripts/bootstrap.py", "scripts/cleanup.py", "scripts/test_bootstrap.py",
+        "scripts/provision-vercel.mjs", "scripts/provision-vercel.test.mjs",
+    ]:
         (ROOT / relative).unlink(missing_ok=True)
     for relative in ["scripts/licenses", "scripts/direct-templates", "scripts/__pycache__"]:
         shutil.rmtree(ROOT / relative, ignore_errors=True)

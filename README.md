@@ -82,8 +82,10 @@ On Vercel, set **Root Directory `docs`**. The docs project includes an affected-
 
 **Quota-safe by default:** the committed `.github/workflows/docs.yml` runs on
 `main` pushes affecting `docs/**`, plus documentation pull requests for checks.
-The workflow validates with `astro check` and calls the Vercel CLI for a
-production deployment on docs-only pushes; pull requests do not deploy.
+The workflow validates with `astro check`, builds static output in CI, and
+deploys the Vercel Build Output API v3 bundle with `vercel deploy --prebuilt`.
+This avoids broad project-settings queries that can reject project-scoped
+tokens. Pull requests run checks without deploying.
 Rust/Cargo, release metadata, and optional Swift app changes **do not create a
 Vercel deployment or consume a deployment quota entry**.
 
@@ -93,14 +95,27 @@ unfiltered Vercel Git-triggered deploys. `ignoreCommand` is intentionally
 absent: an ignored build creates a canceled deployment, which still counts
 toward Vercel quotas. The Vercel build and install settings are retained.
 
-For the generated repository, configure these GitHub Actions secrets before
-the first automatic docs deployment:
+Once per generated repository, after linking the Vercel project and logging
+into GitHub, provision the deployment credential with:
 
-- `VERCEL_TOKEN`: a Vercel access token, stored securely.
-- `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`: obtained from
-  `docs/.vercel/project.json` after linking the docs project.
+```bash
+cd docs && vercel link --yes && cd ..
+just vercel-provision
+```
 
-Missing secrets produce an explicit Actions error rather than a silent skip.
+The one-time script reads the linked project IDs, tries the existing protected
+Vercel CLI session, and mints a **project-scoped token** via Vercel's REST API.
+It sends `VERCEL_TOKEN` directly to GitHub Actions **secrets** over stdin, and
+stores `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as GitHub Actions **variables**.
+The token is never printed or committed. Reprovisioning reuses an existing
+token unless explicitly rotated (`node scripts/provision-vercel.mjs --rotate`).
+Revoke any previous token in Vercel account settings after rotation.
+If the CLI session lacks token-creation permission, the script falls back to a
+classic full-account provisioning token securely stored in macOS Keychain as
+`amxv vercel bootstrap token`. That account-scoped credential stays local.
+Agents still use `just docs-check` locally, not a separate production build.
+
+Missing credentials produce an explicit Actions error rather than a silent skip.
 The template repository itself runs checks without deploying. `just docs-test`
 validates the path filter and a retained `docs/scripts/should-build.mjs` helper;
 the helper is **not** wired to Vercel's Ignored Build Step.
@@ -166,7 +181,12 @@ just bootstrap-clean
 just check
 ```
 
-Cleanup removes `scripts/bootstrap.py`, one-time license fixtures, generated-project Bootstrap tests, temporary distribution templates, and the Bootstrap Justfile recipes. It preserves Cargo sources, normal `just` commands, `cargo-dist` settings, docs, release workflow, and all runtime code and installers required by the chosen distribution method.
+Cleanup removes `scripts/bootstrap.py`, the one-time Vercel provisioning script,
+license fixtures, generated-project Bootstrap tests, temporary distribution
+templates, and the Bootstrap Justfile recipes. Provision Vercel **before**
+cleanup. It preserves Cargo sources, normal `just` commands, `cargo-dist`
+settings, docs, release workflow, and all runtime code and installers required
+by the chosen distribution method.
 
 ## Release
 

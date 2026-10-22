@@ -9,6 +9,9 @@ bootstrap *args:
 bootstrap-clean:
     python3 scripts/cleanup.py
 
+vercel-provision:
+    node scripts/provision-vercel.mjs
+
 fmt:
     cargo fmt --all
 

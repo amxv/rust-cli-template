@@ -47,6 +47,16 @@ jobs:
       - name: Check
         run: bun run check
 
+      - name: Build static output for project-scoped Vercel deployment
+        if: >-
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          github.ref == 'refs/heads/main' &&
+          github.repository != 'amxv/rust-cli-template'
+        run: |
+          set -euo pipefail
+          bun run build
+          node scripts/prepare-prebuilt.mjs
+
       # Only docs/** pushes reach this workflow. Vercel Git auto-deploys are
       # disabled so a Rust/Swift-only push consumes no deployment quota.
       - name: Deploy production docs to Vercel
@@ -56,12 +66,14 @@ jobs:
           github.repository != 'amxv/rust-cli-template'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
           if [[ -z "$VERCEL_TOKEN" || -z "$VERCEL_ORG_ID" || -z "$VERCEL_PROJECT_ID" ]]; then
-            echo 'Configure VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID secrets for docs deployment.' >&2
+            echo 'Run just vercel-provision after linking docs/ to Vercel to configure the token secret and project variables.' >&2
             exit 1
           fi
-          npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+          # Project-scoped tokens can fail broad CLI project-settings queries.
+          # The Build Output API bundle avoids 'vercel pull/build' entirely.
+          npx --yes vercel@latest deploy --prebuilt --prod --yes --non-interactive

@@ -78,6 +78,7 @@ class BootstrapTests(unittest.TestCase):
 
     def cleanup(self) -> None:
         run(self.repo, "just", "bootstrap-clean")
+        self.assertFalse((self.repo / "scripts/provision-vercel.mjs").exists())
         self.assertTrue((self.repo / ".github/workflows/docs.yml").exists(),
                         "Bootstrap cleanup must retain docs-only production deployment workflow")
         self.assertTrue((self.repo / "docs/scripts/should-build.mjs").exists(),
@@ -88,9 +89,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse((self.repo / "scripts/licenses").exists())
         self.assertNotIn("bootstrap *args:", (self.repo / "Justfile").read_text())
         self.assertNotIn("bootstrap-clean:", (self.repo / "Justfile").read_text())
+        self.assertNotIn("vercel-provision:", (self.repo / "Justfile").read_text())
 
     def test_npm_only(self) -> None:
         self.bootstrap("npm")
+        run(self.repo, "node", "--test", "scripts/provision-vercel.test.mjs")
         self.assertFalse((self.repo / "apps/menubar").exists())
         dist = toml(self.repo, "dist-workspace.toml")["dist"]
         self.assertEqual(dist["installers"], ["npm"])

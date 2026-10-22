@@ -46,9 +46,14 @@ but keep `git.deploymentEnabled: false` in the committed `vercel.json`. The
 and Cargo changes never request a Vercel deployment, so they cannot use its
 daily deployment quota through this pipeline.
 
-In the generated GitHub repository, configure secrets `VERCEL_TOKEN`,
-`VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` from the linked docs project before
-the first push-to-deploy. `just docs-test` validates both the GitHub path
+After linking `docs/` to Vercel, run `just vercel-provision` in the generated
+repository **before** `just bootstrap-clean`. It mints a project-scoped CI
+token using the existing Vercel CLI login (or macOS Keychain as a fallback),
+stores `VERCEL_TOKEN` in Actions secrets and the two non-sensitive IDs in
+Actions variables. The GitHub workflow builds and deploys Astro's static
+output with `--prebuilt`, avoiding broad settings calls that may fail with
+restricted tokens. Agents use only `just docs-check` for local Astro
+validation. `just docs-test` validates both the GitHub path
 filter and the retained local Git diff helper `docs/scripts/should-build.mjs`.
 It is deliberately **not** wired to `ignoreCommand`, because a canceled
 Vercel Ignored Build Step still counts toward deployment quotas.
