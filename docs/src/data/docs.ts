@@ -1,25 +1,35 @@
-export const siteConfig = {
+// Bootstrap edits only this identity block; prose pages remain project-owned.
+const generatedIdentity = {
   name: "mycli",
   strapline: "A Rust CLI ready to ship",
   description:
     "Documentation for mycli, a Rust command-line starter with tests, dist-powered releases, npm installation, and an isolated docs site.",
   repoUrl: "https://github.com/amxv/rust-cli-template",
+  footerText: "A Rust CLI with build, release, installer, and documentation plumbing ready from the first commit.",
+  distributionText: "GitHub Releases and npm packages are driven by dist."
+} as const;
+
+export const siteConfig = {
+  name: generatedIdentity.name,
+  strapline: generatedIdentity.strapline,
+  description: generatedIdentity.description,
+  repoUrl: generatedIdentity.repoUrl,
   accentColor: "#b7410e",
   accentColorDark: "#f28c52",
   footerSections: [
     {
-      title: "mycli",
-      text: "A Rust CLI with build, release, installer, and documentation plumbing ready from the first commit."
+      title: generatedIdentity.name,
+      text: generatedIdentity.footerText
     },
     {
       title: "Distribution",
-      text: "GitHub Releases, shell and PowerShell installers, npm packages, checksums, and artifact attestations are driven by dist."
+      text: generatedIdentity.distributionText
     },
     {
       title: "Repository",
       linkPrefix: "Source: ",
-      linkHref: "https://github.com/amxv/rust-cli-template",
-      linkLabel: "github.com/amxv/rust-cli-template"
+      linkHref: generatedIdentity.repoUrl,
+      linkLabel: generatedIdentity.repoUrl.replace("https://", "")
     }
   ]
 } as const;

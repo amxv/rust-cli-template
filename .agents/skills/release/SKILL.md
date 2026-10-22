@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write, Edit
 
 Use this skill whenever the user asks for a new release.
 
-`Cargo.toml` owns the package version. `docs/src/content/docs/changelog.md` owns curated release notes. `dist` owns release artifacts, installers, GitHub Release creation, attestations, and npm publication after the version tag reaches GitHub.
+`Cargo.toml` owns the package version. `docs/src/content/docs/changelog.md` owns curated release notes. `dist` owns release artifacts, GitHub Release creation, attestations, and the one configured installation/publishing method: npm **or** direct shell/PowerShell installers.
 
 ## 1. Inspect release state
 
@@ -45,7 +45,7 @@ Otherwise choose the smallest SemVer bump justified by user-visible changes sinc
 - fixes, performance improvements, or maintenance: patch bump
 - before `1.0.0`, use a minor bump for breaking changes and a patch bump for compatible fixes
 
-Do not reuse an existing tag, GitHub Release version, or npm version.
+Do not reuse an existing tag, GitHub Release version, or npm version (when npm is enabled).
 
 Update `package.version` in `Cargo.toml`, then run Cargo once without `--locked` so the root package entry in `Cargo.lock` follows the new version. Confirm the resolved package version:
 
@@ -103,7 +103,7 @@ dist plan
 git diff --check
 ```
 
-`dist plan` must describe the expected platform archives, checksums, shell installer, PowerShell installer, generated npm package, and release manifest.
+`dist plan` must describe the expected platform archives, checksums, and release manifest. For `installers = ["npm"]`, expect an npm package and **no shell/PowerShell installer**. For `installers = ["shell", "powershell"]`, expect those installers and **no npm package or publish job**.
 
 If crates.io publishing is enabled in `Cargo.toml` and this release is intended for crates.io too, also run:
 
@@ -162,13 +162,13 @@ Verify the GitHub Release and its assets:
 gh release view "v${VERSION}" --json tagName,name,url,assets
 ```
 
-Verify npm publication using the package identity from `dist-workspace.toml`:
+**Only when npm publishing is configured**, verify npm publication using the package identity from `dist-workspace.toml`:
 
 ```bash
 npm view "<npm-package>" version dist-tags.latest --json
 ```
 
-Confirm the published npm version equals `${VERSION}` and that the GitHub Release contains the artifacts described by `dist plan`.
+For direct distribution, instead verify that the website-hosted `/install.sh` and `/install.ps1` match the GitHub Release installer artifact names, and test the installer plus `upgrade --check`. Confirm the GitHub Release contains only the artifacts described by `dist plan`.
 
 If crates.io publication was requested, publish/verify it separately and report its status separately from GitHub/npm.
 
@@ -182,6 +182,6 @@ Report:
 - validation results
 - GitHub Actions release result
 - GitHub Release URL and artifact set
-- npm package/version
+- npm package/version **or** direct install/upgrade verification
 - crates.io status when applicable
 - any non-blocking warnings

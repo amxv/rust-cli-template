@@ -41,17 +41,17 @@ dist plan
 dist generate
 ```
 
-Current distribution defaults:
+Distribution is selected during bootstrap (`npm` is the default):
 
 - GitHub Releases
-- shell installer for macOS/Linux
-- PowerShell installer for Windows
-- npm binary installer package
+- npm mode: npm binary installer package, no standalone shell/PowerShell installer
+- direct mode: website-hosted shell and PowerShell wrappers, native `upgrade`,
+  cargo-dist shell/PowerShell installers, and no npm publication
 - GitHub artifact attestations
 
 ## npm publishing
 
-The generated `dist` npm publish job expects a GitHub Actions secret:
+Only npm-mode projects have a generated npm publish job and need this GitHub Actions secret:
 
 ```text
 NPM_TOKEN

@@ -4,7 +4,7 @@ members = ["cargo:."]
 [dist]
 cargo-dist-version = "0.32.0"
 ci = ["github"]
-installers = ["shell", "powershell", "npm"]
+installers = ["npm"]
 publish-jobs = ["npm"]
 install-path = "CARGO_HOME"
 npm-scope = "@amxv"

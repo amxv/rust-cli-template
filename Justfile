@@ -6,6 +6,9 @@ default:
 bootstrap *args:
     python3 scripts/bootstrap.py {{args}}
 
+bootstrap-clean:
+    python3 scripts/cleanup.py
+
 fmt:
     cargo fmt --all
 

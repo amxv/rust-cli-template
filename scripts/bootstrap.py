@@ -71,6 +71,7 @@ class State:
     license: str
     rust_version: str
     crates_io: bool
+    distribution: str
 
     @property
     def github_url(self) -> str:
@@ -96,6 +97,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--github-owner", help="GitHub user or organization")
     parser.add_argument("--github-repo", help="GitHub repository name")
     parser.add_argument("--npm-package", help="npm package, e.g. @acme/pluck or pluck")
+    parser.add_argument("--distribution", choices=("npm", "direct"), default=None,
+                        help="npm (default) or direct GitHub Releases with website installers and upgrade")
     parser.add_argument("--description", help="One-line project description")
     parser.add_argument("--homepage", help="Project homepage URL")
     parser.add_argument("--canonical-url", help="Canonical docs-site URL")
@@ -148,6 +151,7 @@ def current_state() -> State:
     dist = read_toml(DIST_TOML)["dist"]
     npm_scope = dist.get("npm-scope") or None
     npm_package = dist.get("npm-package", package["name"])
+    distribution = "npm" if "npm" in dist.get("installers", []) else "direct"
 
     toolchain = read_toml(TOOLCHAIN_TOML)["toolchain"]["channel"]
     astro = ASTRO_CONFIG.read_text()
@@ -167,6 +171,7 @@ def current_state() -> State:
         license=package.get("license", "Apache-2.0"),
         rust_version=toolchain,
         crates_io=package.get("publish", True) is not False,
+        distribution=distribution,
     )
 
 
@@ -196,6 +201,11 @@ def parse_npm(value: str) -> tuple[str | None, str]:
 
 
 def resolve_state(current: State, args: argparse.Namespace) -> State:
+    distribution = args.distribution or current.distribution
+    if current.github_repo != TEMPLATE_REPO and distribution != current.distribution:
+        raise SystemExit("Choose distribution on first bootstrap; use a fresh template to switch methods")
+    if distribution == "direct" and args.npm_package:
+        raise SystemExit("--npm-package is valid only with --distribution npm")
     origin = detected_origin()
     cloned_from_template = (
         current.github_owner == TEMPLATE_OWNER
@@ -205,6 +215,7 @@ def resolve_state(current: State, args: argparse.Namespace) -> State:
     )
     owner = args.github_owner or (origin[0] if cloned_from_template else current.github_owner)
     repo = args.github_repo or (origin[1] if cloned_from_template else current.github_repo)
+    repository_changed = owner != current.github_owner or repo != current.github_repo
 
     cli_name = args.cli_name or (
         repo if cloned_from_template and current.cli_name == TEMPLATE_CLI else current.cli_name
@@ -215,17 +226,17 @@ def resolve_state(current: State, args: argparse.Namespace) -> State:
 
     if args.npm_package:
         npm_scope, npm_package = parse_npm(args.npm_package)
-    elif cloned_from_template and current.npm_full_name == TEMPLATE_NPM:
+    elif repository_changed and current.npm_full_name == TEMPLATE_NPM:
         npm_scope, npm_package = parse_npm(f"@{owner.lower()}/{repo.lower()}")
     else:
         npm_scope, npm_package = current.npm_scope, current.npm_package
 
     github_url = f"https://github.com/{owner}/{repo}"
     homepage = args.homepage or (
-        f"{github_url}#readme" if cloned_from_template else current.homepage
+        f"{github_url}#readme" if repository_changed else current.homepage
     )
     canonical = args.canonical_url or (
-        github_url if cloned_from_template else current.canonical_url
+        github_url if repository_changed else current.canonical_url
     )
 
     state = State(
@@ -241,6 +252,7 @@ def resolve_state(current: State, args: argparse.Namespace) -> State:
         license=normalize_license(args.license or current.license),
         rust_version=args.rust_version or current.rust_version,
         crates_io=current.crates_io if args.crates_io is None else args.crates_io,
+        distribution=distribution,
     )
     validate_state(state)
     if args.visibility == "private":
@@ -271,9 +283,9 @@ def validate_state(state: State) -> None:
 
 
 def replace_assignment(text: str, key: str, value: str, *, quoted: bool = True) -> str:
-    rendered = f'"{value}"' if quoted else value
+    rendered = json.dumps(value, ensure_ascii=False) if quoted else value
     pattern = rf"(?m)^(\s*{re.escape(key)}\s*=\s*).*$"
-    updated, count = re.subn(pattern, rf"\g<1>{rendered}", text, count=1)
+    updated, count = re.subn(pattern, lambda match: match.group(1) + rendered, text, count=1)
     if count != 1:
         raise SystemExit(f"Could not find {key} in expected config")
     return updated
@@ -298,19 +310,18 @@ def update_cargo(current: State, new: State) -> None:
 
 def update_dist(new: State) -> None:
     text = DIST_TOML.read_text()
-    text = replace_assignment(text, "npm-package", new.npm_package)
-    scope_pattern = r'(?m)^npm-scope\s*=.*\n'
-    if new.npm_scope:
-        if re.search(scope_pattern, text):
-            text = re.sub(scope_pattern, f'npm-scope = "{new.npm_scope}"\n', text, count=1)
-        else:
-            text = text.replace(
-                f'npm-package = "{new.npm_package}"\n',
-                f'npm-scope = "{new.npm_scope}"\nnpm-package = "{new.npm_package}"\n',
-                1,
-            )
+    if new.distribution == "npm":
+        text = replace_assignment(text, "installers", '["npm"]', quoted=False)
+        text = replace_assignment(text, "publish-jobs", '["npm"]', quoted=False)
+        text = re.sub(r'(?m)^npm-(?:scope|package)\s*=.*\n', "", text)
+        value = f'npm-package = "{new.npm_package}"\n'
+        if new.npm_scope:
+            value = f'npm-scope = "{new.npm_scope}"\n' + value
+        text = text.replace('install-path = "CARGO_HOME"\n', 'install-path = "CARGO_HOME"\n' + value, 1)
     else:
-        text = re.sub(scope_pattern, "", text, count=1)
+        text = replace_assignment(text, "installers", '["shell", "powershell"]', quoted=False)
+        text = replace_assignment(text, "publish-jobs", '[]', quoted=False)
+        text = re.sub(r'(?m)^npm-(?:scope|package)\s*=.*\n', "", text)
     DIST_TOML.write_text(text)
 
 
@@ -331,44 +342,7 @@ def update_source_identity(current: State, new: State) -> None:
     test.write_text(text)
 
 
-def broad_identity_files() -> list[Path]:
-    files = [ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "CONTRIBUTORS.md"]
-    files.extend((ROOT / ".agents").rglob("*.md"))
-    for suffix in ("*.md", "*.ts", "*.astro", "*.json", "*.mjs"):
-        files.extend((ROOT / "docs").rglob(suffix))
-    return sorted(set(path for path in files if path.exists()))
-
-
-def replace_identity_text(current: State, new: State) -> None:
-    replacements = [
-        (current.npm_full_name, new.npm_full_name),
-        (current.github_url, new.github_url),
-        (current.homepage, new.homepage),
-        (current.canonical_url, new.canonical_url),
-        (current.description, new.description),
-        (current.github_repo, new.github_repo),
-        (current.cli_name, new.cli_name),
-        (current.license, new.license),
-        (current.rust_version, new.rust_version),
-    ]
-    replacements = sorted(
-        ((old, fresh) for old, fresh in replacements if old and fresh and old != fresh),
-        key=lambda pair: len(pair[0]),
-        reverse=True,
-    )
-    for path in broad_identity_files():
-        text = path.read_text()
-        updated = text
-        for old, fresh in replacements:
-            updated = updated.replace(old, fresh)
-        if path == ROOT / "docs" / "package.json":
-            updated = updated.replace(
-                f'@{current.github_owner.lower()}/{current.github_repo.lower()}-docs',
-                f'@{new.github_owner.lower()}/{new.github_repo.lower()}-docs',
-            )
-        if updated != text:
-            path.write_text(updated)
-
+def update_docs_metadata(new: State) -> None:
     docs_package = ROOT / "docs" / "package.json"
     package_json = json.loads(docs_package.read_text())
     package_json["name"] = f"@{new.github_owner.lower()}/{new.github_repo.lower()}-docs"
@@ -396,6 +370,90 @@ def replace_identity_text(current: State, new: State) -> None:
     if count != 1:
         raise SystemExit("Could not update docs canonical URL in astro.config.mjs")
     ASTRO_CONFIG.write_text(astro)
+
+    data = ROOT / "docs/src/data/docs.ts"
+    content = data.read_text()
+    identity = {
+        "name": new.cli_name,
+        "strapline": new.description,
+        "description": new.description,
+        "repoUrl": new.github_url,
+        "footerText": new.description,
+        "distributionText": (
+            "GitHub Releases and npm packages are generated by dist."
+            if new.distribution == "npm" else
+            "GitHub Releases, install scripts, and checksums are generated without npm."
+        ),
+    }
+    updated, count = re.subn(
+        r"(?m)^const generatedIdentity = \{[\s\S]*?^\} as const;",
+        lambda _: "const generatedIdentity = " + json.dumps(identity, indent=2, ensure_ascii=False) + " as const;",
+        content, count=1,
+    )
+    if count != 1:
+        raise SystemExit("Missing generatedIdentity in docs/src/data/docs.ts")
+    data.write_text(updated)
+
+
+def configure_distribution(new: State) -> None:
+    if new.distribution != "direct":
+        return
+    templates = ROOT / "scripts/direct-templates"
+    substitutions = {
+        "__CLI__": new.cli_name,
+        "__CLI_ENV__": re.sub(r"[^A-Za-z0-9]", "_", new.cli_name).upper(),
+        "__OWNER__": new.github_owner,
+        "__REPO__": new.github_repo,
+        "__SITE__": new.canonical_url.rstrip("/"),
+    }
+
+    def generate(source: str, destination: str) -> None:
+        text = (templates / source).read_text()
+        for old, fresh in substitutions.items():
+            text = text.replace(old, fresh)
+        target = ROOT / destination
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+
+    generate("install.sh", "docs/public/install.sh")
+    generate("install.ps1", "docs/public/install.ps1")
+    generate("upgrade.rs", "src/commands/upgrade.rs")
+
+    cli_file = ROOT / "src/cli.rs"
+    cli = cli_file.read_text()
+    if "Upgrade {" not in cli:
+        cli = cli.replace(
+            "pub enum Command {",
+            "pub enum Command {\n    /// Install the latest release or check for updates.\n"
+            "    Upgrade {\n        #[arg(long)]\n        check: bool,\n    },",
+            1,
+        )
+    cli_file.write_text(cli)
+
+    lib_file = ROOT / "src/lib.rs"
+    lib = lib_file.read_text()
+    if "Command::Upgrade" not in lib:
+        lib = lib.replace(
+            "match cli.command {",
+            "match cli.command {\n        Command::Upgrade { check } => commands::upgrade::run(check),",
+            1,
+        )
+    lib_file.write_text(lib)
+
+    commands_file = ROOT / "src/commands/mod.rs"
+    commands = commands_file.read_text()
+    if "pub mod upgrade;" not in commands:
+        commands += "pub mod upgrade;\n"
+    commands_file.write_text(commands)
+
+    dist = shutil.which("dist")
+    if not dist:
+        raise SystemExit("dist 0.32.0 must be installed to generate a direct-only release workflow")
+    expected = read_toml(DIST_TOML)["dist"]["cargo-dist-version"]
+    version = subprocess.run([dist, "--version"], text=True, capture_output=True, check=True).stdout
+    if expected not in version:
+        raise SystemExit(f"Expected dist {expected}, found: {version.strip()}")
+    subprocess.run([dist, "generate"], cwd=ROOT, check=True)
 
 
 def render_license(state: State) -> str:
@@ -484,13 +542,17 @@ def main() -> None:
     update_dist(new)
     update_toolchain(new)
     update_source_identity(current, new)
-    replace_identity_text(current, new)
+    update_docs_metadata(new)
     (ROOT / "LICENSE").write_text(license_text)
     refresh_lockfile()
+    configure_distribution(new)
 
     print(f"Initialized {new.cli_name} for {new.github_url}")
     print(f"Cargo package: {new.crate_name}")
-    print(f"npm package: {new.npm_full_name}")
+    print(f"Distribution: {new.distribution}")
+    if new.distribution == "npm":
+        print(f"npm package: {new.npm_full_name}")
+    print("README and docs pages are intentionally left for the project agent.")
     print(f"Rust: {new.rust_version}")
     print(f"License: {new.license}")
     print(f"crates.io publishing: {'enabled' if new.crates_io else 'disabled'}")

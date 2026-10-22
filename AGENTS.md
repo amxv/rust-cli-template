@@ -70,10 +70,19 @@ dist generate
 For a newly cloned template, use the bootstrap script to initialize project identity:
 
 ```bash
-just bootstrap --cli-name pluck --npm-package @acme/pluck --description "A fast file picker"
+just bootstrap --cli-name pluck --distribution npm --npm-package @acme/pluck --description "A fast file picker"
 ```
 
-It synchronizes Cargo metadata, binary/crate references, `dist` npm identity, docs identity, canonical URL, license, and Rust toolchain. GitHub owner/repo are inferred from the cloned `origin` when possible.
+For a direct install/upgrade project, use `--distribution direct` and omit
+`--npm-package`. Direct mode creates website-hosted `install.sh`/`install.ps1`,
+a native `upgrade --check` command, and a release workflow without npm. npm
+mode produces only the npm installer/publish path. The template defaults to npm.
+
+Bootstrap synchronizes Cargo metadata, binary/crate references, selected
+`dist` publishing method, docs identity fields, canonical URL, license, and
+Rust toolchain. GitHub owner/repo are inferred from the cloned origin when
+possible. README and docs pages are deliberately left for project agents to
+write. Once setup is final, run `just bootstrap-clean` and rerun `just check`.
 
 ## Docs boundary
 
@@ -83,6 +92,9 @@ Vercel should use `docs` as its Root Directory. `docs/scripts/should-build.mjs` 
 
 ## Release boundary
 
-`dist-workspace.toml` is the source of truth for binary/install targets and npm installer configuration. `.github/workflows/release.yml` is generated output. If distribution changes, edit `dist-workspace.toml`, run `dist generate`, and commit both changes together.
+`dist-workspace.toml` is the source of truth for binary/install targets and
+selected distribution mode. `.github/workflows/release.yml` is generated output.
+If distribution changes, edit `dist-workspace.toml`, run `dist generate`, and
+commit both changes together.
 
 For any request to cut or ship a release, read and follow `.agents/skills/release/SKILL.md`.
