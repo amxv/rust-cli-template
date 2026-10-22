@@ -52,7 +52,6 @@ The Cargo package version and Git tag must agree. After updating the version and
 ```bash
 just check
 just docs-check
-just docs-build
 dist plan
 just release-tag 0.2.0
 ```

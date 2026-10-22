@@ -74,10 +74,29 @@ just docs-install
 just docs-dev
 just docs-test
 just docs-check
-just docs-build
 ```
 
 On Vercel, set **Root Directory `docs`**. The docs project includes an affected-path check to skip rebuilds for Rust-only changes. `docs/src/data/docs.ts` has generated identity fields; branding and actual docs content remain agent-owned.
+
+### Automatic docs deployments
+
+The template already includes **`docs/scripts/should-build.mjs`** and
+**`docs/vercel.json`**, with `ignoreCommand` and `git.deploymentEnabled`
+configured for **production `main` only**. Link the Vercel project to its
+GitHub repository with Root Directory `docs`.
+
+Pushing only Rust source, root Cargo/dist metadata, or optional Swift app code
+skips the site build. Any `docs/` modification, including the website-hosted
+install scripts, triggers a build. Unknown Git history safely builds rather
+than risk skipping a necessary deployment. `just docs-test` runs regression
+tests for these cases, including multi-commit pushes and renamed files.
+
+**A canceled build from Vercel's Ignored Build Step still counts toward its
+deployment quotas**, although it avoids rebuilding Astro. To strictly avoid
+quota usage for Rust-only pushes, use a docs-path-filtered GitHub Actions
+deployment with automatic Vercel Git deployments disabled. Vercel's native
+skip-unaffected-projects feature avoids quota counts for eligible JavaScript
+workspaces, but this Rust-first template is not inherently eligible.
 
 ## Direct installation and auto-updates
 
@@ -149,7 +168,6 @@ Cleanup removes `scripts/bootstrap.py`, one-time license fixtures, generated-pro
 ```bash
 just check
 just docs-check
-just docs-build
 dist plan
 # Edit and commit the changelog and version bump, then push main.
 just release-tag 0.2.0

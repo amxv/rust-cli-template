@@ -31,14 +31,23 @@ just docs-dev
 ## Validation
 
 ```bash
+just docs-test
 just docs-check
-just docs-build
 ```
 
-Run check and build serially.
+Astro check is sufficient locally; Vercel runs the production build when deploying.
 
 ## Vercel
 
 Set the Vercel project Root Directory to `docs`. The committed `vercel.json` builds static Astro output and calls `scripts/should-build.mjs` before a deployment.
 
-That script compares Git commits and returns a skip result when only Rust/root code changed. Its behavior is covered by `bun run test:vercel`.
+That script compares merge-base Git commit ranges and returns a skip result when
+only Rust, Swift, or root metadata changed; anything under `docs/` triggers a
+build. It handles earlier changes in multi-commit pushes, renames, and deletions,
+and fails open if Vercel lacks the necessary Git history. Its behavior is covered
+by `just docs-test` / `bun run test:vercel`.
+
+Vercel still counts deployments canceled by the Ignored Build Step toward daily
+deployment limits. For a strict no-quota code-only push, use a `docs/**`-scoped
+GitHub Actions deployment with automatic Vercel Git deployments disabled, or
+native skip-unaffected-projects when the repository meets the workspace rules.

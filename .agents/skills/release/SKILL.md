@@ -93,12 +93,12 @@ A missing required publishing secret is a release blocker; configure it through 
 
 ## 5. Validate
 
-Run from the repository root, serially:
+Run from the repository root. The Astro check validates documentation changes;
+the deployment platform owns its production build:
 
 ```bash
 just check
 just docs-check
-just docs-build
 dist plan
 git diff --check
 ```

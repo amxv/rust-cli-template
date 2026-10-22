@@ -26,11 +26,10 @@ The documentation application is isolated in `docs/`:
 ```bash
 just docs-install
 just docs-check
-just docs-build
 just docs-dev
 ```
 
-Run `docs-check` and `docs-build` serially. Configure Vercel with Root Directory `docs`.
+Use `docs-check` for routine local validation; Vercel runs the production build. Configure Root Directory `docs`.
 
 ## Release infrastructure
 

@@ -42,11 +42,10 @@ cargo test --locked
 cargo test --locked <test-name>
 ```
 
-Docs, run serially when validating the site:
+Validate the docs using Astro check (a local production build is unnecessary):
 
 ```bash
 just docs-check
-just docs-build
 ```
 
 Release configuration:
@@ -108,7 +107,14 @@ Gatekeeper or claim that browser downloads are warning-free.
 
 Keep all web tooling in `docs/`: package metadata, Bun dependencies, Astro config, generated Astro state, and Vercel config.
 
-Vercel should use `docs` as its Root Directory. `docs/scripts/should-build.mjs` intentionally skips deployments for Rust-only changes.
+Vercel should use `docs` as its Root Directory. `docs/scripts/should-build.mjs`
+skips Astro builds when only Rust, release metadata, or Swift app files change,
+while any `docs/` change is build-relevant. The committed `docs/vercel.json`
+restricts automatic Git deployments to `main` and invokes that script as
+`ignoreCommand`. Run `just docs-test` to verify Git commit-range handling.
+An ignored/canceled build **still counts toward Vercel's deployment quotas**;
+for a strict daily limit use a docs-path-filtered GitHub Actions deploy with
+automatic Vercel Git deploys disabled instead.
 
 ## Release boundary
 

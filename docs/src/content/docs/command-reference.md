@@ -40,7 +40,6 @@ cargo test --locked
 just docs-install
 just docs-dev
 just docs-check
-just docs-build
 just docs-test
 ```
 

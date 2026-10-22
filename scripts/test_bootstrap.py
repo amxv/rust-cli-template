@@ -72,6 +72,8 @@ class BootstrapTests(unittest.TestCase):
 
     def cleanup(self) -> None:
         run(self.repo, "just", "bootstrap-clean")
+        self.assertTrue((self.repo / "docs/scripts/should-build.mjs").exists(),
+                        "Bootstrap cleanup must retain Vercel docs-only filtering")
         self.assertFalse((self.repo / "scripts/bootstrap.py").exists())
         self.assertFalse((self.repo / "scripts/cleanup.py").exists())
         self.assertFalse((self.repo / "scripts/direct-templates").exists())
