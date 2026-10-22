@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
-// Vercel runs this script from its docs/ Root Directory.
-// Exit 0: ignore deployment. Exit 1: build and deploy.
-// All Git paths are relative to the repository root, not docs/.
+// A local/regression helper for assessing changes to docs/.
+// Actual production filtering runs in GitHub Actions using on.push.paths.
+// Never wire this into Vercel ignoreCommand: that creates a canceled deployment
+// that still counts toward Vercel's deployment quota.
+// Return true to build and false to skip; all paths are relative to repo root.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';

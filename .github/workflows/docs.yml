@@ -4,12 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/docs.yml"
       - "docs/**"
   pull_request:
     branches: [main]
     paths:
-      - ".github/workflows/docs.yml"
       - "docs/**"
   workflow_dispatch:
 
@@ -30,6 +28,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install Node for Vercel CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -44,5 +47,21 @@ jobs:
       - name: Check
         run: bun run check
 
-      - name: Build
-        run: bun run build
+      # Only docs/** pushes reach this workflow. Vercel Git auto-deploys are
+      # disabled so a Rust/Swift-only push consumes no deployment quota.
+      - name: Deploy production docs to Vercel
+        if: >-
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          github.ref == 'refs/heads/main' &&
+          github.repository != 'amxv/rust-cli-template'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$VERCEL_TOKEN" || -z "$VERCEL_ORG_ID" || -z "$VERCEL_PROJECT_ID" ]]; then
+            echo 'Configure VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID secrets for docs deployment.' >&2
+            exit 1
+          fi
+          npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"

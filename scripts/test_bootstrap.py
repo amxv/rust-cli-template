@@ -69,9 +69,17 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn('"repoUrl": "https://github.com/example/spark"', (self.repo / "docs/src/data/docs.ts").read_text())
         self.assertIn("https://spark.example.com", (self.repo / "docs/astro.config.mjs").read_text())
         self.assertIn("@example/spark-docs", (self.repo / "docs/package.json").read_text())
+        vercel = json.loads((self.repo / "docs/vercel.json").read_text())
+        self.assertIs(vercel["git"]["deploymentEnabled"], False)
+        self.assertNotIn("ignoreCommand", vercel)
+        workflow = (self.repo / ".github/workflows/docs.yml").read_text()
+        self.assertIn('"docs/**"', workflow)
+        self.assertIn("VERCEL_TOKEN", workflow)
 
     def cleanup(self) -> None:
         run(self.repo, "just", "bootstrap-clean")
+        self.assertTrue((self.repo / ".github/workflows/docs.yml").exists(),
+                        "Bootstrap cleanup must retain docs-only production deployment workflow")
         self.assertTrue((self.repo / "docs/scripts/should-build.mjs").exists(),
                         "Bootstrap cleanup must retain Vercel docs-only filtering")
         self.assertFalse((self.repo / "scripts/bootstrap.py").exists())

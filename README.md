@@ -80,23 +80,30 @@ On Vercel, set **Root Directory `docs`**. The docs project includes an affected-
 
 ### Automatic docs deployments
 
-The template already includes **`docs/scripts/should-build.mjs`** and
-**`docs/vercel.json`**, with `ignoreCommand` and `git.deploymentEnabled`
-configured for **production `main` only**. Link the Vercel project to its
-GitHub repository with Root Directory `docs`.
+**Quota-safe by default:** the committed `.github/workflows/docs.yml` runs on
+`main` pushes affecting `docs/**`, plus documentation pull requests for checks.
+The workflow validates with `astro check` and calls the Vercel CLI for a
+production deployment on docs-only pushes; pull requests do not deploy.
+Rust/Cargo, release metadata, and optional Swift app changes **do not create a
+Vercel deployment or consume a deployment quota entry**.
 
-Pushing only Rust source, root Cargo/dist metadata, or optional Swift app code
-skips the site build. Any `docs/` modification, including the website-hosted
-install scripts, triggers a build. Unknown Git history safely builds rather
-than risk skipping a necessary deployment. `just docs-test` runs regression
-tests for these cases, including multi-commit pushes and renamed files.
+Keep the Vercel project **connected to GitHub** with Root Directory `docs`, but
+leave `git.deploymentEnabled: false` in `docs/vercel.json` to disable the
+unfiltered Vercel Git-triggered deploys. `ignoreCommand` is intentionally
+absent: an ignored build creates a canceled deployment, which still counts
+toward Vercel quotas. The Vercel build and install settings are retained.
 
-**A canceled build from Vercel's Ignored Build Step still counts toward its
-deployment quotas**, although it avoids rebuilding Astro. To strictly avoid
-quota usage for Rust-only pushes, use a docs-path-filtered GitHub Actions
-deployment with automatic Vercel Git deployments disabled. Vercel's native
-skip-unaffected-projects feature avoids quota counts for eligible JavaScript
-workspaces, but this Rust-first template is not inherently eligible.
+For the generated repository, configure these GitHub Actions secrets before
+the first automatic docs deployment:
+
+- `VERCEL_TOKEN`: a Vercel access token, stored securely.
+- `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`: obtained from
+  `docs/.vercel/project.json` after linking the docs project.
+
+Missing secrets produce an explicit Actions error rather than a silent skip.
+The template repository itself runs checks without deploying. `just docs-test`
+validates the path filter and a retained `docs/scripts/should-build.mjs` helper;
+the helper is **not** wired to Vercel's Ignored Build Step.
 
 ## Direct installation and auto-updates
 

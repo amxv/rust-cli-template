@@ -107,14 +107,17 @@ Gatekeeper or claim that browser downloads are warning-free.
 
 Keep all web tooling in `docs/`: package metadata, Bun dependencies, Astro config, generated Astro state, and Vercel config.
 
-Vercel should use `docs` as its Root Directory. `docs/scripts/should-build.mjs`
-skips Astro builds when only Rust, release metadata, or Swift app files change,
-while any `docs/` change is build-relevant. The committed `docs/vercel.json`
-restricts automatic Git deployments to `main` and invokes that script as
-`ignoreCommand`. Run `just docs-test` to verify Git commit-range handling.
-An ignored/canceled build **still counts toward Vercel's deployment quotas**;
-for a strict daily limit use a docs-path-filtered GitHub Actions deploy with
-automatic Vercel Git deploys disabled instead.
+The `.github/workflows/docs.yml` job is triggered by `docs/**` changes to
+`main` and calls Vercel CLI for production deployments only on those pushes.
+Other pushes create no Vercel deployment and use no deployment quota. Keep the
+Vercel GitHub connection and Root Directory `docs`, but preserve
+`git.deploymentEnabled: false` and the absence of `ignoreCommand` in
+`docs/vercel.json` to avoid duplicate, quota-consuming Git deployments. Before
+the first generated-project deployment, securely configure GitHub secrets
+`VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` from the linked project.
+Run `just docs-test` to verify the GitHub filter and the retained local diff
+helper (`docs/scripts/should-build.mjs`). Never re-enable automatic Vercel Git
+deployments without first disabling the Actions deployment path.
 
 ## Release boundary
 

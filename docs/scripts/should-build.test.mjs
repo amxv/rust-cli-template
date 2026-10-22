@@ -130,8 +130,20 @@ test('unresolved base/head and missing Git repository fail open', t => {
   assert.equal(shouldBuild(tmpdir(), { VERCEL_GIT_COMMIT_SHA: 'HEAD' }), true);
 });
 
-test('committed Vercel configuration restricts branches and uses the script', () => {
+test('committed Vercel config disables quota-consuming Git auto-deployments', () => {
   const config = JSON.parse(readFileSync(path.join(docsRoot, 'vercel.json'), 'utf8'));
-  assert.equal(config.ignoreCommand, 'node scripts/should-build.mjs');
-  assert.deepEqual(config.git.deploymentEnabled, { main: true, '*': false });
+  assert.equal(config.git.deploymentEnabled, false);
+  assert.equal(Object.hasOwn(config, 'ignoreCommand'), false);
+});
+
+test('GitHub Docs workflow triggers only for docs changes on main', () => {
+  const workflow = readFileSync(path.join(docsRoot, '../.github/workflows/docs.yml'), 'utf8');
+  assert.match(workflow, /branches:\s*\[main\]/);
+  assert.match(workflow, /paths:[\s\S]*?['"]docs\/\*\*['"]/);
+  assert.doesNotMatch(workflow, /^\s+-\s+["']?\.github\/workflows\//m);
+  assert.match(workflow, /vercel(?:@latest)? deploy --prod/);
+  assert.match(workflow, /VERCEL_TOKEN/);
+  assert.match(workflow, /VERCEL_ORG_ID/);
+  assert.match(workflow, /VERCEL_PROJECT_ID/);
+  assert.match(workflow, /github\.repository != 'amxv\/rust-cli-template'/);
 });

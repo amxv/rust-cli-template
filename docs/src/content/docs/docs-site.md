@@ -39,15 +39,16 @@ Astro check is sufficient locally; Vercel runs the production build when deployi
 
 ## Vercel
 
-Set the Vercel project Root Directory to `docs`. The committed `vercel.json` builds static Astro output and calls `scripts/should-build.mjs` before a deployment.
+Set the Vercel project Root Directory to `docs` and connect its GitHub repo,
+but keep `git.deploymentEnabled: false` in the committed `vercel.json`. The
+`.github/workflows/docs.yml` workflow responds to `docs/**` changes on
+`main`, validates Astro, and deploys with the Vercel CLI. Rust-only, Swift-only,
+and Cargo changes never request a Vercel deployment, so they cannot use its
+daily deployment quota through this pipeline.
 
-That script compares merge-base Git commit ranges and returns a skip result when
-only Rust, Swift, or root metadata changed; anything under `docs/` triggers a
-build. It handles earlier changes in multi-commit pushes, renames, and deletions,
-and fails open if Vercel lacks the necessary Git history. Its behavior is covered
-by `just docs-test` / `bun run test:vercel`.
-
-Vercel still counts deployments canceled by the Ignored Build Step toward daily
-deployment limits. For a strict no-quota code-only push, use a `docs/**`-scoped
-GitHub Actions deployment with automatic Vercel Git deployments disabled, or
-native skip-unaffected-projects when the repository meets the workspace rules.
+In the generated GitHub repository, configure secrets `VERCEL_TOKEN`,
+`VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` from the linked docs project before
+the first push-to-deploy. `just docs-test` validates both the GitHub path
+filter and the retained local Git diff helper `docs/scripts/should-build.mjs`.
+It is deliberately **not** wired to `ignoreCommand`, because a canceled
+Vercel Ignored Build Step still counts toward deployment quotas.
