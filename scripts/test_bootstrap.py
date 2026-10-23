@@ -50,12 +50,12 @@ class BootstrapTests(unittest.TestCase):
         self.repo = copy_repo(Path(self.temp.name) / "checkout")
         self.prose = {p: (self.repo / p).read_bytes() for p in PROSE_FILES}
 
-    def bootstrap(self, distribution: str, menubar: bool = False) -> None:
+    def bootstrap(self, distribution: str, menubar: bool = False, rust_version: str = "1.98.0") -> None:
         args = [
             "python3", "scripts/bootstrap.py", "--cli-name", "spark", "--crate-name", "spark",
             "--github-owner", "example", "--github-repo", "spark", "--description", 'A "fast" native CLI',
             "--homepage", "https://spark.example.com", "--canonical-url", "https://spark.example.com",
-            "--rust-version", "1.98.0", "--distribution", distribution,
+            "--rust-version", rust_version, "--distribution", distribution,
         ]
         if menubar:
             args.append("--macos-menubar")
@@ -75,6 +75,11 @@ class BootstrapTests(unittest.TestCase):
         workflow = (self.repo / ".github/workflows/docs.yml").read_text()
         self.assertIn('"docs/**"', workflow)
         self.assertIn("VERCEL_TOKEN", workflow)
+        self.assertIn("working-directory: .", workflow)
+        self.assertIn("cp -R docs/.vercel/output .vercel/output", workflow)
+        ci = (self.repo / ".github/workflows/ci.yml").read_text()
+        self.assertIn(f"- name: Install Rust {rust_version}", ci)
+        self.assertIn(f"toolchain: {rust_version}", ci)
 
     def cleanup(self) -> None:
         run(self.repo, "just", "bootstrap-clean")
@@ -90,6 +95,20 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn("bootstrap *args:", (self.repo / "Justfile").read_text())
         self.assertNotIn("bootstrap-clean:", (self.repo / "Justfile").read_text())
         self.assertNotIn("vercel-provision:", (self.repo / "Justfile").read_text())
+        ci = (self.repo / ".github/workflows/ci.yml").read_text()
+        self.assertNotIn("Check bootstrap script syntax", ci)
+        self.assertNotIn("scripts/bootstrap.py", ci)
+
+    def test_just_bootstrap_preserves_quoted_arguments(self) -> None:
+        run(self.repo, "just", "bootstrap", "--cli-name", "spark",
+            "--github-owner", "example", "--github-repo", "spark",
+            "--description", 'A "fast" native CLI with spaces',
+            "--rust-version", "1.98.0", "--distribution", "npm")
+        self.assertEqual(toml(self.repo, "Cargo.toml")["package"]["description"],
+                         'A "fast" native CLI with spaces')
+        self.cleanup()
+        self.assertIn('set positional-arguments\n', (self.repo / "Justfile").read_text())
+        self.assertIn("Hello, two words!", run(self.repo, "just", "run", "hello", "two words"))
 
     def test_npm_only(self) -> None:
         self.bootstrap("npm")
@@ -108,7 +127,8 @@ class BootstrapTests(unittest.TestCase):
         run(self.repo, "cargo", "check", "--locked")
 
     def test_direct_only(self) -> None:
-        self.bootstrap("direct")
+        # The current stable toolchain surfaced new Clippy checks in Rindle.
+        self.bootstrap("direct", rust_version="1.99.1")
         self.assertFalse((self.repo / "apps/menubar").exists())
         self.assertFalse((self.repo / ".github/workflows/publish-menubar.yml").exists())
         dist = toml(self.repo, "dist-workspace.toml")["dist"]
@@ -127,6 +147,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("AutoUpdate", (self.repo / "src/cli.rs").read_text())
         run(self.repo, "sh", "-n", "docs/public/install.sh")
         run(self.repo, "cargo", "fmt", "--all", "--", "--check")
+        run(self.repo, "cargo", "clippy", "--locked", "--all-targets", "--", "-D", "warnings")
         run(self.repo, "cargo", "test", "--locked")
         output = run(self.repo, "cargo", "run", "--quiet", "--", "upgrade", "--help")
         self.assertIn("--check", output)

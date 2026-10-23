@@ -35,13 +35,29 @@ just docs-test
 just docs-check
 ```
 
-Astro check is sufficient locally; Vercel runs the production build when deploying.
+Astro check is sufficient locally; GitHub Actions builds and packages the
+production site before deploying to Vercel.
 
 ## Vercel
 
 Set the Vercel project Root Directory to `docs` and connect its GitHub repo,
 but keep `git.deploymentEnabled: false` in the committed `vercel.json`. The
-`.github/workflows/docs.yml` workflow responds to `docs/**` changes on
+project should use framework `astro`, install command
+`bun install --frozen-lockfile`, build command `bun run build`, and output `dist`.
+New Vercel projects can otherwise default to repository root `.`.
+
+For a custom **subdomain**, pass the project explicitly when attaching it:
+
+```bash
+vercel domains add <subdomain.example.com> <project-name> --scope <team>
+vercel domains verify <subdomain.example.com> --project <project-name> --scope <team> --json
+```
+
+Use the exact DNS record in `recommended.records` for Cloudflare, with proxying
+disabled, and verify again. `vercel domains inspect` can describe the parent
+zone rather than the subdomain's actual record requirements.
+
+The `.github/workflows/docs.yml` workflow responds to `docs/**` changes on
 `main`, validates Astro, and deploys with the Vercel CLI. Rust-only, Swift-only,
 and Cargo changes never request a Vercel deployment, so they cannot use its
 daily deployment quota through this pipeline.
@@ -52,7 +68,10 @@ token using the existing Vercel CLI login (or macOS Keychain as a fallback),
 stores `VERCEL_TOKEN` in Actions secrets and the two non-sensitive IDs in
 Actions variables. The GitHub workflow builds and deploys Astro's static
 output with `--prebuilt`, avoiding broad settings calls that may fail with
-restricted tokens. Agents use only `just docs-check` for local Astro
+restricted tokens. The workflow builds inside `docs/`, then copies the prebuilt
+bundle to repository-root `.vercel/output` and invokes Vercel from that root.
+Do not call Vercel from `docs/`: the configured Root Directory `docs` would be
+resolved twice. Agents use only `just docs-check` for local Astro
 validation. `just docs-test` validates both the GitHub path
 filter and the retained local Git diff helper `docs/scripts/should-build.mjs`.
 It is deliberately **not** wired to `ignoreCommand`, because a canceled

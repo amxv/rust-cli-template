@@ -338,6 +338,20 @@ def update_toolchain(new: State) -> None:
     TOOLCHAIN_TOML.write_text(replace_assignment(text, "channel", new.rust_version))
 
 
+def update_ci_toolchain(new: State) -> None:
+    """Keep generated GitHub CI aligned with the project's pinned Rust toolchain."""
+    workflow = ROOT / ".github/workflows/ci.yml"
+    text = workflow.read_text()
+    for pattern, replacement in (
+        (r"(?m)^(      - name: Install Rust )\d+\.\d+(?:\.\d+)?$", new.rust_version),
+        (r"(?m)^(          toolchain: )\d+\.\d+(?:\.\d+)?$", new.rust_version),
+    ):
+        text, count = re.subn(pattern, lambda match: match.group(1) + replacement, text, count=1)
+        if count != 1:
+            raise SystemExit("Could not synchronize Rust version in .github/workflows/ci.yml")
+    workflow.write_text(text)
+
+
 def update_source_identity(current: State, new: State) -> None:
     main = ROOT / "src" / "main.rs"
     text = main.read_text().replace(f"{current.crate_ident}::run()", f"{new.crate_ident}::run()")
@@ -609,6 +623,7 @@ def main() -> None:
     update_cargo(current, new)
     update_dist(new)
     update_toolchain(new)
+    update_ci_toolchain(new)
     update_source_identity(current, new)
     update_docs_metadata(new)
     (ROOT / "LICENSE").write_text(license_text)

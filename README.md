@@ -84,6 +84,10 @@ On Vercel, set **Root Directory `docs`**. The docs project includes an affected-
 `main` pushes affecting `docs/**`, plus documentation pull requests for checks.
 The workflow validates with `astro check`, builds static output in CI, and
 deploys the Vercel Build Output API v3 bundle with `vercel deploy --prebuilt`.
+It builds within `docs/`, stages `docs/.vercel/output` at repository-root
+`.vercel/output`, then invokes Vercel **from the repository root**. Keep that
+split: Vercel's configured Root Directory is already `docs`, so invoking it
+from `docs/` would incorrectly resolve to `docs/docs`.
 This avoids broad project-settings queries that can reject project-scoped
 tokens. Pull requests run checks without deploying.
 Rust/Cargo, release metadata, and optional Swift app changes **do not create a
@@ -181,12 +185,15 @@ just bootstrap-clean
 just check
 ```
 
-Cleanup removes `scripts/bootstrap.py`, the one-time Vercel provisioning script,
+Cleanup removes `scripts/bootstrap.py`, its now-obsolete CI syntax-check step,
+the one-time Vercel provisioning script,
 license fixtures, generated-project Bootstrap tests, temporary distribution
 templates, and the Bootstrap Justfile recipes. Provision Vercel **before**
 cleanup. It preserves Cargo sources, normal `just` commands, `cargo-dist`
 settings, docs, release workflow, and all runtime code and installers required
 by the chosen distribution method.
+Bootstrap also synchronizes the selected `--rust-version` with GitHub CI;
+run `just check` after cleanup and verify the generated CI workflow succeeds.
 
 ## Release
 

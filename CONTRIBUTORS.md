@@ -29,7 +29,8 @@ just docs-check
 just docs-dev
 ```
 
-Use `docs-check` for routine local validation; Vercel runs the production build. Configure Root Directory `docs`.
+Use `docs-check` for routine local validation; GitHub Actions builds the
+production bundle. Configure Vercel Root Directory `docs`.
 
 The docs GitHub Action deploys production **only** for `docs/**` changes on
 `main`. Vercel remains connected to GitHub, but its Git-triggered deployments
@@ -37,6 +38,8 @@ are disabled via `docs/vercel.json` to save the Vercel deployment quota. Set
 GitHub Actions secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID`
 from the linked docs project before the first production docs deployment.
 Code-only commits must never issue a Vercel deployment request.
+The workflow stages `docs/.vercel/output` as repository-root `.vercel/output`
+and invokes Vercel from the **repository root**, not `docs/`.
 
 ## Release infrastructure
 

@@ -151,5 +151,14 @@ test('GitHub Docs workflow triggers only for docs changes on main', () => {
   assert.match(workflow, /bun run build/);
   assert.match(workflow, /prepare-prebuilt\.mjs/);
   assert.match(workflow, /vercel@latest deploy --prebuilt --prod/);
+  // Vercel's project Root Directory is docs/. Deploying from docs/ resolves
+  // docs/docs, and --prebuilt needs the bundle at the deploy cwd's .vercel/.
+  const deploy = workflow.split('      - name: Deploy production docs to Vercel\n')[1];
+  assert.ok(deploy, 'production deployment step must exist');
+  assert.match(workflow, /working-directory: docs/);
+  assert.match(deploy, /^        working-directory: \.$/m);
+  assert.match(deploy, /test -f docs\/\.vercel\/output\/config\.json/);
+  assert.match(deploy, /cp -R docs\/\.vercel\/output \.vercel\/output/);
+  assert.match(deploy, /test -f \.vercel\/output\/config\.json/);
   assert.match(workflow, /github\.repository != 'amxv\/rust-cli-template'/);
 });

@@ -1,10 +1,11 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+set positional-arguments
 
 default:
     @just --list
 
 bootstrap *args:
-    python3 scripts/bootstrap.py {{args}}
+    python3 scripts/bootstrap.py "$@"
 
 bootstrap-clean:
     python3 scripts/cleanup.py
@@ -35,7 +36,7 @@ build-release:
     cargo build --locked --release
 
 run *args:
-    cargo run -- {{args}}
+    cargo run -- "$@"
 
 docs-install:
     cd docs && bun install --frozen-lockfile
@@ -62,9 +63,9 @@ release-tag version:
     #!/usr/bin/env bash
     set -euo pipefail
     actual="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
-    if [[ "$actual" != "{{version}}" ]]; then
-      echo "Cargo.toml version is $actual, not {{version}}" >&2
+    if [[ "$actual" != "{{ version }}" ]]; then
+      echo "Cargo.toml version is $actual, not {{ version }}" >&2
       exit 1
     fi
-    git tag "v{{version}}"
-    git push origin "v{{version}}"
+    git tag "v{{ version }}"
+    git push origin "v{{ version }}"

@@ -62,8 +62,10 @@ fn load() -> Result<Preferences> {
 fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
     let parent = path.parent().context("Missing auto-update directory")?;
     fs::create_dir_all(parent).context("Cannot create auto-update directory")?;
-    if let Ok(meta) = fs::symlink_metadata(path) {
-        if !meta.file_type().is_file() { bail!("Refusing non-regular auto-update path") }
+    if let Ok(meta) = fs::symlink_metadata(path)
+        && !meta.file_type().is_file()
+    {
+        bail!("Refusing non-regular auto-update path")
     }
     let name = format!(".auto-update-{}-{}", std::process::id(),
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos());

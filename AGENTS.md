@@ -82,10 +82,12 @@ Scheduler (Windows), independently of the CLI process. Auto-update is off by
 default; failures do not silently turn it off or create retry loops.
 
 Bootstrap synchronizes Cargo metadata, binary/crate references, selected
-`dist` publishing method, docs identity fields, canonical URL, license, and
-Rust toolchain. GitHub owner/repo are inferred from the cloned origin when
+`dist` publishing method, docs identity fields, canonical URL, license, Rust
+toolchain, and GitHub CI Rust version. The `just bootstrap` recipe preserves
+quoted, multi-word arguments. GitHub owner/repo are inferred from the cloned origin when
 possible. README and docs pages are deliberately left for project agents to
 write. Once setup is final, run `just bootstrap-clean` and rerun `just check`.
+Cleanup also removes the CI step that checked the now-deleted bootstrap script.
 
 ## Optional macOS menu bar scaffold
 
@@ -119,7 +121,11 @@ CLI authentication (or a Keychain fallback) to mint a project-scoped token,
 stores `VERCEL_TOKEN` as a GitHub Actions **secret**, and writes Vercel IDs as
 Actions **variables**. Never print or commit credentials. GitHub Actions builds
 the static Astro output and deploys it with `--prebuilt`, compatible with
-restricted project tokens; local agents only run `just docs-check`.
+restricted project tokens; local agents only run `just docs-check`. The build
+runs within `docs/`, but deployment must run from repository root with the
+bundle copied from `docs/.vercel/output` to `.vercel/output`, because Vercel
+already has Root Directory `docs` configured. Never deploy from `docs/` with
+that configuration; it resolves the project to `docs/docs`.
 Run `just docs-test` to verify the GitHub filter and the retained local diff
 helper (`docs/scripts/should-build.mjs`). Never re-enable automatic Vercel Git
 deployments without first disabling the Actions deployment path.
